@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <link rel="manifest" href="https://augustineiacopelli.github.io/appaday/manifests/110.webmanifest">
 <script src="https://augustineiacopelli.github.io/appaday/save.js" defer></script>
+<script src="https://augustineiacopelli.github.io/appaday/keys.js" data-app="110" data-legacy-key="appaday110-settings:apiKey" data-accent="#A63D9E" defer></script>
 <title>Album Cover Generator | AppADay 110</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -411,11 +412,7 @@
 <div class="modal-overlay hidden" id="settingsOverlay">
   <div class="modal">
     <h2>Settings</h2>
-    <p class="modal-note">Your Claude API key is stored only in this browser's local storage and is sent directly to Anthropic's API. It is never saved anywhere else.</p>
-    <div class="field">
-      <label for="apiKeyInput">Claude API Key</label>
-      <input type="password" id="apiKeyInput" placeholder="sk-ant-...">
-    </div>
+    <div class="field" id="keyMount"><p class="modal-note">The key manager is loading. If this stays, check your connection and reload.</p></div>
     <div class="field">
       <label for="sessionNameInput">Session Name</label>
       <input type="text" id="sessionNameInput" placeholder="optional label">
@@ -442,7 +439,6 @@
   var settingsOverlay = document.getElementById("settingsOverlay");
   var closeSettingsBtn = document.getElementById("closeSettingsBtn");
   var saveSettingsBtn = document.getElementById("saveSettingsBtn");
-  var apiKeyInput = document.getElementById("apiKeyInput");
   var sessionNameInput = document.getElementById("sessionNameInput");
 
   var cooldownTimer = null;
@@ -451,14 +447,13 @@
   function loadSettings(){
     try{
       var raw = localStorage.getItem(STORAGE_KEY);
-      if(!raw) return { apiKey:"", sessionName:"" };
+      if(!raw) return { sessionName:"" };
       var parsed = JSON.parse(raw);
       return {
-        apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
         sessionName: typeof parsed.sessionName === "string" ? parsed.sessionName : ""
       };
     }catch(e){
-      return { apiKey:"", sessionName:"" };
+      return { sessionName:"" };
     }
   }
 
@@ -472,7 +467,7 @@
 
   function openSettings(){
     var s = loadSettings();
-    apiKeyInput.value = s.apiKey;
+    if(window.AppKeys) window.AppKeys.mountSettings(document.getElementById("keyMount"));
     sessionNameInput.value = s.sessionName;
     settingsOverlay.classList.remove("hidden");
   }
@@ -488,7 +483,6 @@
   });
   saveSettingsBtn.addEventListener("click", function(){
     saveSettings({
-      apiKey: apiKeyInput.value.trim(),
       sessionName: sessionNameInput.value.trim()
     });
     closeSettings();
@@ -713,17 +707,26 @@
   }
 
   function generate(mood, skipCooldown){
-    var settings = loadSettings();
-    if(!settings.apiKey){
+    if(!window.AppKeys){
       showNoKeyError();
       return;
     }
+    window.AppKeys.get().then(function(apiKey){
+      if(!apiKey){
+        showNoKeyError();
+        return;
+      }
+      generateKeyed(mood, skipCooldown, apiKey);
+    });
+  }
+
+  function generateKeyed(mood, skipCooldown, apiKey){
 
     showLoading();
     if(!skipCooldown) startCooldown();
 
     Promise.allSettled([
-      callClaude(mood, settings.apiKey),
+      callClaude(mood, apiKey),
       fetchCoverArt(mood)
     ]).then(function(results){
       renderResult(mood, results[0], results[1]);
